@@ -252,3 +252,4 @@ For support, email support@nutriplanpro.com or create an issue in the repository
 ---
 
 **NutriPlan Pro** - Making healthy eating simple and personalized with AI! 🎯
+
