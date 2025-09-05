@@ -756,39 +756,111 @@ IMPORTANT: Return only valid JSON. Do not include any additional text or explana
       // Try to extract JSON from the response
       let jsonMatch = response.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
-        throw new Error('No JSON found in response');
+        // Try to extract from markdown code blocks
+        const codeBlockMatch = response.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+        if (codeBlockMatch) {
+          jsonMatch = [codeBlockMatch[1]];
+        } else {
+          throw new Error('No JSON found in response');
+        }
       }
       
       let jsonStr = jsonMatch[0];
       
+      // Pre-process the JSON string to fix common issues before parsing
+      console.log('Pre-processing JSON string...');
+      console.log('Original JSON string length:', jsonStr.length);
+      
+      // Fix fractions in JSON (e.g., 1/4 -> 0.25) - do this first
+      const originalJsonStr = jsonStr;
+      jsonStr = jsonStr.replace(/(\d+)\/(\d+)/g, (match, numerator, denominator) => {
+        const result = (parseInt(numerator) / parseInt(denominator));
+        console.log(`Fixed fraction: ${match} -> ${result}`);
+        return result.toString();
+      });
+      
+      if (originalJsonStr !== jsonStr) {
+        console.log('Fractions were fixed in JSON string');
+      }
+      
+      // Remove extra fields that aren't in our schema (like 'notes' in ingredients)
+      const beforeNotes = jsonStr;
+      jsonStr = jsonStr.replace(/,\s*"notes":\s*"[^"]*"/g, '');
+      jsonStr = jsonStr.replace(/,\s*"preparation":\s*"[^"]*"/g, '');
+      jsonStr = jsonStr.replace(/,\s*"prep":\s*"[^"]*"/g, '');
+      
+      if (beforeNotes !== jsonStr) {
+        console.log('Removed extra fields (notes/preparation/prep) from JSON');
+      }
+      
+      // Fix empty unit fields
+      jsonStr = jsonStr.replace(/"unit":\s*""/g, '"unit": "piece"');
+      
+      // Remove trailing commas
+      jsonStr = jsonStr.replace(/,(\s*[}\]])/g, '$1');
+      
+      // Fix any remaining malformed JSON issues
+      jsonStr = jsonStr.replace(/,\s*}/g, '}');
+      jsonStr = jsonStr.replace(/,\s*]/g, ']');
+      
+      // Fix any remaining trailing commas
+      jsonStr = jsonStr.replace(/,(\s*[}\]])/g, '$1');
+      
+      // Fix any double commas
+      jsonStr = jsonStr.replace(/,,/g, ',');
+      
+      // Fix any missing commas between array elements
+      jsonStr = jsonStr.replace(/}\s*{/g, '},{');
+      jsonStr = jsonStr.replace(/]\s*\[/g, '],[');
+      
+      // Log the cleaned JSON string for debugging
+      console.log('Cleaned JSON string length:', jsonStr.length);
+      console.log('First 500 chars of cleaned JSON:', jsonStr.substring(0, 500));
+      
       // Try to fix common JSON issues
       try {
+        console.log('Attempting first JSON parse...');
         const parsed = JSON.parse(jsonStr);
         
         if (!parsed.title || !parsed.instructions) {
           throw new Error('Invalid recipe structure');
         }
         
+        console.log('JSON parsed successfully on first attempt');
         return parsed;
       } catch (parseError) {
-        // If JSON parsing fails, try to fix common issues
-        console.log('Attempting to fix malformed JSON...');
+        // If JSON parsing still fails, try additional fixes
+        console.log('First parse failed, attempting to fix malformed JSON...');
+        console.log('Parse error:', parseError instanceof Error ? parseError.message : String(parseError));
         
-        // Remove trailing commas
-        jsonStr = jsonStr.replace(/,(\s*[}\]])/g, '$1');
+        // Try to identify and fix the specific issue
+        const errorMessage = parseError instanceof Error ? parseError.message : String(parseError);
+        if (errorMessage.includes('Expected \',\' or \']\' after array element')) {
+          console.log('Detected array element issue, applying specific fixes...');
+          
+          // Fix array element issues more aggressively
+          jsonStr = jsonStr.replace(/,\s*}/g, '}');
+          jsonStr = jsonStr.replace(/,\s*]/g, ']');
+          jsonStr = jsonStr.replace(/,\s*\[/g, '[');
+          jsonStr = jsonStr.replace(/,\s*{/g, '{');
+          
+          // Remove any remaining trailing commas
+          jsonStr = jsonStr.replace(/,(\s*[}\]])/g, '$1');
+        }
         
         // Fix missing quotes around property names
         jsonStr = jsonStr.replace(/(\w+):/g, '"$1":');
         
         // Try parsing again
+        console.log('Attempting second JSON parse...');
         const parsed = JSON.parse(jsonStr);
-        
-        if (!parsed.title || !parsed.instructions) {
-          throw new Error('Invalid recipe structure');
+          
+          if (!parsed.title || !parsed.instructions) {
+            throw new Error('Invalid recipe structure');
+          }
+          
+          return parsed;
         }
-        
-        return parsed;
-      }
     } catch (error) {
       console.error('Error parsing recipe response:', error);
       console.error('Raw response:', response);

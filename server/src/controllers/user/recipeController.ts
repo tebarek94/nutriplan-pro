@@ -718,7 +718,9 @@ export const generateRecipe = async (req: Request, res: Response) => {
         [
           generatedRecipe.title,
           generatedRecipe.description,
-          JSON.stringify(generatedRecipe.instructions),
+          Array.isArray(generatedRecipe.instructions) 
+            ? generatedRecipe.instructions.join('\n\n') 
+            : generatedRecipe.instructions,
           generatedRecipe.prep_time || 0,
           generatedRecipe.cook_time || 0,
           generatedRecipe.servings || 4,
@@ -740,32 +742,34 @@ export const generateRecipe = async (req: Request, res: Response) => {
       const recipeId = (recipeResult as any).insertId;
 
       // Insert ingredients
-      for (const ingredient of generatedRecipe.ingredients) {
-        // First, try to find existing ingredient or create a new one
-        let ingredientId;
-        
-        // Check if ingredient exists
-        const [existingIngredients] = await connection.execute<RowDataPacket[]>(
-          'SELECT id FROM ingredients WHERE name = ?',
-          [ingredient.name]
-        );
-        
-        if (existingIngredients.length > 0) {
-          ingredientId = existingIngredients[0].id;
-        } else {
-          // Create new ingredient
-          const [ingredientResult] = await connection.execute(
-            'INSERT INTO ingredients (name, calories_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g) VALUES (?, ?, ?, ?, ?)',
-            [ingredient.name, 0, 0, 0, 0] // Default values
+      if (generatedRecipe.ingredients && generatedRecipe.ingredients.length > 0) {
+        for (const ingredient of generatedRecipe.ingredients) {
+          // First, try to find existing ingredient or create a new one
+          let ingredientId;
+          
+          // Check if ingredient exists
+          const [existingIngredients] = await connection.execute<RowDataPacket[]>(
+            'SELECT id FROM ingredients WHERE name = ?',
+            [ingredient.name]
           );
-          ingredientId = (ingredientResult as any).insertId;
+          
+          if (existingIngredients.length > 0) {
+            ingredientId = existingIngredients[0].id;
+          } else {
+            // Create new ingredient
+            const [ingredientResult] = await connection.execute(
+              'INSERT INTO ingredients (name, calories_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g) VALUES (?, ?, ?, ?, ?)',
+              [ingredient.name, 0, 0, 0, 0] // Default values
+            );
+            ingredientId = (ingredientResult as any).insertId;
+          }
+          
+          // Insert recipe ingredient with proper foreign key
+          await connection.execute(
+            'INSERT INTO recipe_ingredients (recipe_id, ingredient_id, ingredient_name, quantity, unit) VALUES (?, ?, ?, ?, ?)',
+            [recipeId, ingredientId, ingredient.name, ingredient.amount, ingredient.unit]
+          );
         }
-        
-        // Insert recipe ingredient
-        await connection.execute(
-          'INSERT INTO recipe_ingredients (recipe_id, ingredient_id, quantity, unit) VALUES (?, ?, ?, ?)',
-          [recipeId, ingredientId, ingredient.amount, ingredient.unit]
-        );
       }
 
       await connection.commit();
@@ -794,8 +798,8 @@ export const generateRecipe = async (req: Request, res: Response) => {
           amount: ing.quantity,
           unit: ing.unit
         })),
-        instructions: JSON.parse(recipes[0].instructions),
-        dietary_tags: JSON.parse(recipes[0].dietary_tags)
+        dietary_tags: JSON.parse(recipes[0].dietary_tags || '[]'),
+        tips: generatedRecipe.tips || null
       };
 
       res.json({

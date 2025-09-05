@@ -12,9 +12,8 @@ import {
   ArrowLeft,
   ChefHat,
   Target,
-  Info,
-  Utensils,
-  Calendar
+  Save,
+  Download
 } from 'lucide-react';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
@@ -47,6 +46,7 @@ interface Recipe {
   created_by: number;
   is_approved: boolean;
   is_featured: boolean;
+  is_ai_generated?: boolean;
   view_count: number;
   like_count: number;
   avg_rating: number;
@@ -65,6 +65,7 @@ const RecipeDetailPage: React.FC = () => {
   const [recipe, setRecipe] = useState<Recipe | null>(null);
   const [loading, setLoading] = useState(true);
   const [liking, setLiking] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     const fetchRecipe = async () => {
@@ -116,6 +117,75 @@ const RecipeDetailPage: React.FC = () => {
     } finally {
       setLiking(false);
     }
+  };
+
+  const handleSaveRecipe = async () => {
+    if (!user) {
+      toast.error('Please login to save recipes');
+      return;
+    }
+
+    try {
+      setSaving(true);
+      const response = await api.toggleFavorite(Number(id));
+      
+      if (response.success) {
+        toast.success('Recipe saved to your favorites!');
+      }
+    } catch (error: any) {
+      console.error('Error saving recipe:', error);
+      toast.error('Failed to save recipe');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDownloadRecipe = () => {
+    if (!recipe) return;
+    
+    const recipeText = `
+${recipe.title}
+${recipe.description ? `\n${recipe.description}` : ''}
+
+Prep Time: ${recipe.prep_time || 'N/A'} minutes
+Cook Time: ${recipe.cook_time || 'N/A'} minutes
+Servings: ${recipe.servings || 'N/A'}
+Difficulty: ${recipe.difficulty || 'N/A'}
+
+INGREDIENTS:
+${recipe.ingredients && recipe.ingredients.length > 0 
+  ? recipe.ingredients.map((ingredient: any, index: number) => 
+      `${index + 1}. ${ingredient.name || ingredient.ingredient_name} - ${ingredient.amount || ingredient.quantity} ${ingredient.unit || ingredient.unit_name || ''}`
+    ).join('\n')
+  : 'No ingredients listed'
+}
+
+INSTRUCTIONS:
+${recipe.instructions || 'No instructions provided'}
+
+NUTRITION INFORMATION (per serving):
+Calories: ${recipe.calories_per_serving || 'N/A'} cal
+Protein: ${recipe.protein_per_serving || 'N/A'}g
+Carbs: ${recipe.carbs_per_serving || 'N/A'}g
+Fat: ${recipe.fat_per_serving || 'N/A'}g
+Fiber: ${recipe.fiber_per_serving || 'N/A'}g
+Sugar: ${recipe.sugar_per_serving || 'N/A'}g
+Sodium: ${recipe.sodium_per_serving || 'N/A'}mg
+
+${recipe.tips ? `\nCOOKING TIPS:\n${recipe.tips}` : ''}
+    `.trim();
+
+    const blob = new Blob([recipeText], { type: 'text/plain' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${recipe.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.txt`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+    
+    toast.success('Recipe downloaded successfully!');
   };
 
   const getDifficultyColor = (difficulty: string) => {
@@ -188,6 +258,21 @@ const RecipeDetailPage: React.FC = () => {
                 </Link>
               )}
               <Button
+                variant="outline"
+                onClick={handleSaveRecipe}
+                disabled={saving}
+              >
+                <Save className="w-4 h-4 mr-2" />
+                {saving ? 'Saving...' : 'Save'}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleDownloadRecipe}
+              >
+                <Download className="w-4 h-4 mr-2" />
+                Download
+              </Button>
+              <Button
                 variant={recipe.is_liked ? "primary" : "outline"}
                 onClick={handleToggleLike}
                 disabled={liking}
@@ -258,34 +343,34 @@ const RecipeDetailPage: React.FC = () => {
 
                          {/* Ingredients */}
              <Card title="Ingredients" padding="md">
-               
-               
-                 <div className="space-y-3">
-                  {recipe.ingredients.map((ingredient, index) => (
-                    <div
-                      key={index}
-                      className="flex items-center p-3 bg-gray-50 dark:bg-gray-700 rounded-lg"
-                    >
-                      <div className="w-2 h-2 bg-primary-500 rounded-full mr-3"></div>
-                      <span className="text-gray-900 dark:text-white">
-                        <strong>{ingredient.name}</strong> - {ingredient.amount} {ingredient.unit}
-                      </span>
+                <div className="space-y-3">
+                  {recipe.ingredients && recipe.ingredients.length > 0 ? (
+                    recipe.ingredients.map((ingredient: any, index: number) => (
+                      <div
+                        key={index}
+                        className="flex items-center p-3 bg-gray-50 dark:bg-gray-700 rounded-lg"
+                      >
+                        <div className="w-2 h-2 bg-primary-500 rounded-full mr-3"></div>
+                        <span className="text-gray-900 dark:text-white">
+                          <strong>{ingredient.name || ingredient.ingredient_name}</strong> - {ingredient.amount || ingredient.quantity} {ingredient.unit || ingredient.unit_name || ''}
+                        </span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-gray-500 dark:text-gray-400 italic">
+                      No ingredients listed
                     </div>
-                  ))}
+                  )}
                 </div>
-              
             </Card>
 
                          {/* Instructions */}
              <Card title="Instructions" padding="md">
-               
-               
-                 <div className="prose max-w-none">
+                <div className="prose max-w-none">
                   <div className="whitespace-pre-wrap text-gray-700 dark:text-gray-300 leading-relaxed">
-                    {recipe.instructions}
+                    {recipe.instructions || 'No instructions provided'}
                   </div>
                 </div>
-              
             </Card>
 
                          {/* Tips */}
@@ -345,40 +430,51 @@ const RecipeDetailPage: React.FC = () => {
           {/* Sidebar */}
           <div className="space-y-6">
             {/* Recipe Info */}
-            <Card padding="md">
-              
-              
-                <div>
-                  <p className="text-sm text-gray-600">Cuisine Type</p>
-                  <p className="font-medium text-gray-900">{recipe.cuisine_type || 'Not specified'}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600">Created</p>
-                  <p className="font-medium text-gray-900">
-                    {new Date(recipe.created_at).toLocaleDateString()}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600">Views</p>
-                  <p className="font-medium text-gray-900 flex items-center">
-                    <Eye className="w-4 h-4 mr-1" />
-                    {recipe.view_count}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600">Average Rating</p>
-                  <p className="font-medium text-gray-900 flex items-center">
-                    <Star className="w-4 h-4 mr-1 text-yellow-400 fill-current" />
-                    {typeof recipe.avg_rating === 'number' ? recipe.avg_rating.toFixed(1) : '0.0'} / 5
-                  </p>
-                </div>
-                {recipe.creator_name && (
+            <Card title="Recipe Information" padding="md">
+                <div className="space-y-4">
                   <div>
-                    <p className="text-sm text-gray-600">Created by</p>
-                    <p className="font-medium text-gray-900">{recipe.creator_name}</p>
+                    <p className="text-sm text-gray-600">Cuisine Type</p>
+                    <p className="font-medium text-gray-900">{recipe.cuisine_type || 'Not specified'}</p>
                   </div>
-                )}
-              
+                  <div>
+                    <p className="text-sm text-gray-600">Created</p>
+                    <p className="font-medium text-gray-900">
+                      {new Date(recipe.created_at).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Views</p>
+                    <p className="font-medium text-gray-900 flex items-center">
+                      <Eye className="w-4 h-4 mr-1" />
+                      {recipe.view_count || 0}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Average Rating</p>
+                    <p className="font-medium text-gray-900 flex items-center">
+                      <Star className="w-4 h-4 mr-1 text-yellow-400 fill-current" />
+                      {typeof recipe.avg_rating === 'number' ? recipe.avg_rating.toFixed(1) : '0.0'} / 5
+                    </p>
+                  </div>
+                  {recipe.creator_name && (
+                    <div>
+                      <p className="text-sm text-gray-600">Created by</p>
+                      <p className="font-medium text-gray-900">{recipe.creator_name}</p>
+                    </div>
+                  )}
+                  {/* AI Generated Indicator */}
+                  {recipe.is_ai_generated && (
+                    <div className="bg-purple-50 p-3 rounded-lg border border-purple-200">
+                      <div className="flex items-center">
+                        <Target className="w-4 h-4 text-purple-600 mr-2" />
+                        <span className="text-sm font-medium text-purple-800">AI Generated Recipe</span>
+                      </div>
+                      <p className="text-xs text-purple-600 mt-1">
+                        This recipe was created using artificial intelligence
+                      </p>
+                    </div>
+                  )}
+                </div>
             </Card>
 
             {/* Dietary Tags */}
@@ -409,38 +505,37 @@ const RecipeDetailPage: React.FC = () => {
             })()}
 
             {/* Nutrition Information */}
-            <Card padding="md">
-              
-              
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Calories</span>
-                  <span className="font-medium">{recipe.calories_per_serving} cal</span>
+            <Card title="Nutrition Information" padding="md">
+                <div className="space-y-3">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Calories</span>
+                    <span className="font-medium">{recipe.calories_per_serving || 'N/A'} cal</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Protein</span>
+                    <span className="font-medium">{recipe.protein_per_serving || 'N/A'}g</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Carbs</span>
+                    <span className="font-medium">{recipe.carbs_per_serving || 'N/A'}g</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Fat</span>
+                    <span className="font-medium">{recipe.fat_per_serving || 'N/A'}g</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Fiber</span>
+                    <span className="font-medium">{recipe.fiber_per_serving || 'N/A'}g</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Sugar</span>
+                    <span className="font-medium">{recipe.sugar_per_serving || 'N/A'}g</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Sodium</span>
+                    <span className="font-medium">{recipe.sodium_per_serving || 'N/A'}mg</span>
+                  </div>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Protein</span>
-                  <span className="font-medium">{recipe.protein_per_serving}g</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Carbs</span>
-                  <span className="font-medium">{recipe.carbs_per_serving}g</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Fat</span>
-                  <span className="font-medium">{recipe.fat_per_serving}g</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Fiber</span>
-                  <span className="font-medium">{recipe.fiber_per_serving}g</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Sugar</span>
-                  <span className="font-medium">{recipe.sugar_per_serving}g</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Sodium</span>
-                  <span className="font-medium">{recipe.sodium_per_serving}mg</span>
-                </div>
-              
             </Card>
 
             {/* Nutrition Notes */}

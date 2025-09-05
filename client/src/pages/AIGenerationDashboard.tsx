@@ -185,14 +185,30 @@ const AIGenerationDashboard: React.FC = () => {
       
       // Load recent AI-generated recipes
       const recipesResponse = await getAllRecipes({ 
-        limit: 5, 
-        is_approved: true
+        limit: 20
       });
       
       if (recipesResponse) {
-        // Filter for AI-generated recipes
-        const aiRecipes = recipesResponse.filter((recipe: any) => recipe.is_ai_generated);
-        setRecentRecipes(aiRecipes);
+        console.log('All recipes:', recipesResponse);
+        console.log('User ID:', user?.id);
+        
+        // Filter for AI-generated recipes (show user's own recipes even if not approved)
+        const aiRecipes = recipesResponse.filter((recipe: any) => {
+          const isAI = recipe.is_ai_generated;
+          const isApproved = recipe.is_approved;
+          const isUserOwned = recipe.created_by === user?.id;
+          
+          console.log(`Recipe ${recipe.title}: isAI=${isAI}, isApproved=${isApproved}, isUserOwned=${isUserOwned}, created_by=${recipe.created_by}`);
+          
+          return isAI && (isApproved || isUserOwned);
+        });
+        
+        console.log('AI Recipes found:', aiRecipes);
+        
+        // Sort by creation date (most recent first)
+        aiRecipes.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        
+        setRecentRecipes(aiRecipes.slice(0, 5));
       }
 
       // Load recent AI-generated meal plans
@@ -202,6 +218,7 @@ const AIGenerationDashboard: React.FC = () => {
       }
     } catch (error) {
       console.error('Error loading recent content:', error);
+      toast.error('Failed to load recent content');
     } finally {
       setLoading(false);
     }
@@ -682,13 +699,23 @@ const AIGenerationDashboard: React.FC = () => {
                 <ChefHat className="w-5 h-5 mr-2 text-blue-600" />
                 Recent AI Recipes
               </h2>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => navigate('/recipes')}
-              >
-                View All
-              </Button>
+              <div className="flex items-center space-x-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={loadRecentContent}
+                  disabled={loading}
+                >
+                  {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Refresh'}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => navigate('/recipes')}
+                >
+                  View All
+                </Button>
+              </div>
             </div>
             
             {recentRecipes.length > 0 ? (

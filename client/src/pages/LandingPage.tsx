@@ -57,12 +57,12 @@ const LandingPage: React.FC = () => {
     {
       icon: Star,
       title: '4.9/5 Rating',
-      subtitle: 'From 10,000+ verified users',
+      subtitle: 'From 10+ verified users',
       color: 'bg-yellow-100 text-yellow-600'
     },
     {
       icon: Users,
-      title: '50,000+ Users',
+      title: '30,+ Users',
       subtitle: 'Active health community',
       color: 'bg-blue-100 text-blue-600'
     },
@@ -74,7 +74,7 @@ const LandingPage: React.FC = () => {
     },
     {
       icon: Shield,
-      title: '100% Secure',
+      title: '90% Secure',
       subtitle: 'Data protection & privacy',
       color: 'bg-purple-100 text-purple-600'
     }

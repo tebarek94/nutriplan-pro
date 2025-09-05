@@ -104,10 +104,13 @@ const AIGenerateRecipePage: React.FC = () => {
         description: formData.description || undefined
       };
       
+      console.log('Generating recipe with request:', request);
       const response = await generateRecipe(request);
+      console.log('Recipe generation response:', response);
       
       if (response.success && 'data' in response) {
         toast.success('Recipe generated successfully!');
+        // Navigate to the recipe detail page
         navigate(`/recipes/${response.data.id}`);
       } else {
         toast.error(response.message || 'Failed to generate recipe');
